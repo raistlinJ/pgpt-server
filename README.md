@@ -44,8 +44,12 @@
 ### Installation
 [![Installation Demo](https://asciinema.org/a/761661.svg)](https://asciinema.org/a/761661)
 
+[Watch on YouTube](https://www.youtube.com/watch?v=RUNmoXqBwVg)
+
 ### PentestGPT in Action
 [![PentestGPT Demo](https://asciinema.org/a/761663.svg)](https://asciinema.org/a/761663)
+
+[Watch on YouTube](https://www.youtube.com/watch?v=cWi3Yb7RmZA)
 
 ---
 
@@ -117,6 +121,7 @@ pentestgpt --target http://host.docker.internal:8000
 | `make connect` | Connect to container (main entry point) |
 | `make stop` | Stop container (config persists) |
 | `make clean-docker` | Remove everything including config |
+
 
 ---
 
