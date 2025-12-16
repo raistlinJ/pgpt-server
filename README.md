@@ -82,7 +82,8 @@
   - Anthropic API Key from [console.anthropic.com](https://console.anthropic.com/)
   - Claude OAuth Login (requires Claude subscription)
   - OpenRouter for alternative models at [openrouter.ai](https://openrouter.ai/keys)
-  - Local LLM via LM Studio, Ollama, or compatible server (see [Using Local LLMs](#using-local-llms))
+  - [Tutorial: Using Local Models with Claude Code](https://docs.google.com/document/d/1ixK7x-wlr5t5TYZJdfm75UME5KnPCpS46boLkUXKg1w/edit?usp=sharing)
+
 
 ### Installation
 
