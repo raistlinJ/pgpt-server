@@ -97,32 +97,66 @@ pip install -e .
 
 ## Benchmark System
 
-The benchmark module (`pentestgpt/benchmark/`) manages benchmark containers:
+The benchmark module (`pentestgpt/benchmark/`) provides both manual orchestration and automated benchmark execution:
 
 ```bash
-# List available benchmarks
+# Manual orchestration (existing)
 pentestgpt-benchmark list                              # List all benchmarks
 pentestgpt-benchmark list --show-tags                  # Show vulnerability tags
 pentestgpt-benchmark list --tags sqli --levels 1      # Filter benchmarks
+pentestgpt-benchmark start XBEN-001-24                 # Start a benchmark
+pentestgpt-benchmark status                            # Check running benchmarks
+pentestgpt-benchmark stop XBEN-001-24                  # Stop a benchmark
 
-# Start a benchmark (exposes port to localhost)
-pentestgpt-benchmark start XBEN-001-24
+# Automated benchmark execution (NEW)
+pentestgpt-benchmark run --all --model opus --timeout 1800      # Run all 104 benchmarks
+pentestgpt-benchmark run --range 1-10 --pattern-flag           # Run benchmarks 1-10
+pentestgpt-benchmark run --ids 1,5,10,25 --timeout 600         # Run specific benchmarks
+pentestgpt-benchmark run --retry-failed                         # Retry failed from last run
 
-# Check running benchmarks
-pentestgpt-benchmark status
-
-# Stop a benchmark
-pentestgpt-benchmark stop XBEN-001-24
-
-# Then run PentestGPT manually against the target
-pentestgpt --target http://0.0.0.0:<port>
+# Results analysis (NEW)
+pentestgpt-benchmark analyze                                    # Analyze latest run
+pentestgpt-benchmark analyze logs/benchmark_run_20251219_231946 # Analyze specific run
 ```
 
 ### Benchmark Module Structure
-- **config.py** - Simple configuration (paths, ports)
+- **config.py** - Configuration (paths, ports, model names, output dir)
 - **registry.py** - `BenchmarkRegistry`: Discovers benchmarks from `benchmark.json` files
-- **docker.py** - Start/stop containers via docker compose
-- **cli.py** - CLI interface for list/start/stop/status commands
+- **docker.py** - Start/stop containers, load benchmarks, parse flags from .env
+- **cli.py** - CLI interface for all commands (list/start/stop/status/run/analyze)
+- **models.py** - Data models (BenchmarkConfig, BenchmarkResult, BenchmarkSummary)
+- **runner.py** - Main orchestrator for automated execution
+- **executor.py** - PentestGPT execution in Docker with timeout handling
+- **parser.py** - Output parsing (flags, cost, session info)
+- **reporter.py** - Logging and summary generation (JSON/TXT)
+- **state.py** - State management for resumption
+- **analyzer.py** - Results visualization with Rich tables
+
+### Automated Execution Features
+- **Batch execution**: Run multiple benchmarks sequentially with timeout control
+- **Early termination**: Monitors for [DONE] marker and stops immediately
+- **Flag validation modes**:
+  - Standard: Exact match with expected flag
+  - `--any-flag`: Accept any flag as success
+  - `--pattern-flag`: Only accept FLAG{32+chars} pattern
+- **Resume capability**: `--resume` flag skips completed benchmarks from state file
+- **Retry failed**: Re-run only failed/timeout/error benchmarks from previous run
+- **Model selection**: Choose Claude variant (opus/sonnet/haiku)
+- **Comprehensive logging**: Per-benchmark logs, detailed log, JSON/TXT summaries
+- **Results analysis**: Rich tables showing success rates by level/tag, cost analysis, failures
+
+### Results Structure
+```
+logs/
+└── benchmark_run_20251219_231946/
+    ├── summary.json          # Machine-readable results
+    ├── summary.txt           # Human-readable summary
+    ├── detailed.log          # Sequential execution log
+    └── benchmarks/
+        ├── XBEN-001-24.log   # Per-benchmark execution logs
+        ├── XBEN-002-24.log
+        └── ...
+```
 
 ## Repository Structure
 
@@ -132,10 +166,11 @@ pentestgpt --target http://0.0.0.0:<port>
 │   ├── core/             # Agent, controller, events, session
 │   ├── interface/        # TUI and CLI
 │   ├── prompts/          # System prompts
-│   ├── benchmark/        # Benchmark runner module
+│   ├── benchmark/        # Benchmark runner module (manual + automated)
 │   └── tools/            # Tool framework
 ├── benchmark/            # Benchmark suites
-│   └── xbow-validation-benchmarks/  # 104 XBOW benchmarks
+│   └── xbow-validation-benchmarks/  # 104 XBOW benchmarks (git submodule)
+├── logs/                 # Automated benchmark run results (gitignored)
 ├── tests/                # Test suite
 ├── workspace/            # Runtime workspace (Docker mount)
 ├── legacy/               # Archived v0.15 (multi-LLM)
