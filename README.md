@@ -59,7 +59,9 @@
 - **Session Persistence** - Save and resume penetration testing sessions
 - **Docker-First** - Isolated, reproducible environment with security tools pre-installed
 - **SSH + Local Web Config** - Start the container, configure local LLM routing in a browser, and run PentestGPT over SSH
+- **YAML Runtime Launcher** - Persist LLM, PentestGPT, and MCP settings in `/workspace/pentestgpt.yml`
 - **MCP Server Management** - Add, list, and remove Claude Code MCP servers from the local web UI
+- **Benchmark Automation** - Run, resume, retry, and analyze XBEN benchmark batches
 
 > **In Progress**: Multi-model support for OpenAI, Gemini, and other LLM providers
 
@@ -71,6 +73,8 @@
 - **Live Walkthrough** - Tracks steps in real-time as the agent works through challenges
 - **Multi-Category Support** - Web, Crypto, Reversing, Forensics, PWN, Privilege Escalation
 - **Real-Time Feedback** - Watch the AI work with live activity updates
+- **Configurable Local Routing** - Route Claude Code traffic through Claude Code Router to OpenAI-compatible servers, Ollama, or OpenRouter
+- **MCP-Aware Workflow** - Attach project, local, or user scoped MCP servers from the browser UI or YAML
 - **Extensible Architecture** - Clean, modular design ready for future enhancements
 
 ---
@@ -92,7 +96,7 @@
 
 ```bash
 # Clone
-git clone <your-repo-url> pgpt-server
+git clone --recurse-submodules <your-repo-url> pgpt-server
 cd pgpt-server
 
 # Fresh Linux host only: install Docker/Compose and host prerequisites
@@ -111,7 +115,7 @@ make config
 # Start the container
 make start
 
-# Configure local LLM endpoint and model routing
+# Configure local LLM endpoint and model routing in your browser
 open http://127.0.0.1:8080
 
 # Connect to container over SSH
@@ -158,7 +162,7 @@ ssh -L 8080:127.0.0.1:8080 youruser@linux-host
 ### Try a Benchmark
 
 ```bash
-uv run pentestgpt-benchmark start XBEN-037-24 
+uv run pentestgpt-benchmark start XBEN-037-24
 ```
 
 Then connect into the container and run:
@@ -171,13 +175,15 @@ pentestgpt --target http://host.docker.internal:8000
 
 | Command | Description |
 |---------|-------------|
-| `make install` | Build the Docker image |
-| `make config` | Configure API key (first-time setup) |
+| `make install` | Install local dependencies and build the Docker image |
+| `make config` | Configure authentication mode and API keys |
 | `make start` | Start container in the background |
 | `make connect` | Start container and connect over SSH |
 | `make ssh` | SSH to a running container |
 | `make web` | Print the local web config UI URL |
 | `make attach` | Attach to the container TTY |
+| `make shell` | Open a new bash shell in the running container |
+| `make logs` | Follow Docker Compose logs |
 | `make stop` | Stop container (config persists) |
 | `make clean-docker` | Remove everything including config |
 
@@ -187,8 +193,18 @@ Default local endpoints:
 - SSH: `ssh -p 2222 pentester@127.0.0.1`
 - Default SSH password: `pentestgpt`
 
-Override ports or the SSH password with `PENTESTGPT_WEB_PORT`, `PENTESTGPT_SSH_PORT`, and `PENTESTGPT_SSH_PASSWORD`.
+Common Docker Compose overrides:
 
+| Variable | Purpose |
+|----------|---------|
+| `PENTESTGPT_AUTH_MODE` | Authentication mode: `local`, `openrouter`, `anthropic`, or `manual` |
+| `PENTESTGPT_WEB_PORT` | Host port for the web config UI, default `8080` |
+| `PENTESTGPT_SSH_PORT` | Host port for SSH, default `2222` |
+| `PENTESTGPT_SSH_PASSWORD` | Password for the `pentester` account |
+| `ANTHROPIC_API_KEY` | Anthropic API key for `anthropic` mode |
+| `OPENROUTER_API_KEY` | OpenRouter API key for `openrouter` mode |
+
+The container entrypoint also honors `PENTESTGPT_SSH_AUTHORIZED_KEYS`, `PENTESTGPT_WEB_ENABLED`, `PENTESTGPT_RUNTIME_CONFIG`, and `PENTESTGPT_CCR_LOG` if you inject those variables directly into the container.
 
 ---
 
@@ -203,6 +219,17 @@ pentestgpt --target 10.10.11.100 --non-interactive
 
 # With challenge context
 pentestgpt --target 10.10.11.50 --instruction "WordPress site, focus on plugin vulnerabilities"
+
+# Custom Claude model
+pentestgpt --target 10.10.11.50 --model claude-sonnet-4-5-20250929
+
+# Resume or inspect sessions
+pentestgpt --target 10.10.11.234 --resume
+pentestgpt --target 10.10.11.234 --session-id SESSION_ID
+pentestgpt --target 10.10.11.234 --list-sessions
+
+# Debugging output modes
+pentestgpt --target 10.10.11.234 --raw --debug
 ```
 
 **Keyboard Shortcuts:** `F1` Help | `Ctrl+P` Pause/Resume | `Ctrl+Q` Quit
@@ -256,11 +283,23 @@ pentestgpt-run --target TARGET
 
 `pentestgpt-run` reads `/workspace/pentestgpt.yml`, starts Claude Code Router, applies any MCP servers declared in the optional `mcp.servers` YAML section, and launches `pentestgpt`. You can also put the target and run flags in YAML under `pentestgpt`.
 
+Useful launcher commands:
+
+```bash
+pentestgpt-run --target http://host.docker.internal:8000 --non-interactive
+pentestgpt-run --configure-only          # write CCR/MCP config without launching PentestGPT
+pentestgpt-run --dry-run --target TARGET # print the pentestgpt command that would run
+pentestgpt-run --skip-mcp --target TARGET
+```
+
+The launcher accepts the same run controls as `pentestgpt`, including `--instruction`, `--model`, `--verbose`, `--debug`, `--raw`, `--resume`, `--session-id`, `--list-sessions`, `--no-telemetry`, and repeated `--extra-arg` values.
+
 Example YAML:
 
 ```yaml
 llm:
   provider: openai-compatible
+  # Use "ollama" with api_base_url: http://host.docker.internal:11434 for Ollama.
   api_base_url: http://host.docker.internal:1234/v1
   api_key: ""
   enforce_ssl: false
@@ -271,19 +310,36 @@ llm:
 pentestgpt:
   target: ""
   instruction: ""
+  model: ""
   non_interactive: false
+  verbose: false
+  debug: false
+  raw: false
+  resume: false
+  session_id: ""
+  list_sessions: false
+  no_telemetry: false
+  extra_args: []
 mcp:
-  servers: []
+  servers:
+    - name: my-mcp
+      transport: http
+      scope: project
+      command_or_url: http://host.docker.internal:3000/mcp
+      args: []
+      env: []
+      headers: []
 ```
 
 ### MCP Servers
 
-Open the **MCP Servers** tab in the web UI to list, add, and remove Claude Code MCP servers. Project-scoped servers are configured from `/workspace`, which is mounted from `./workspace`.
+Open the **MCP Servers** tab in the web UI to list, add, and remove Claude Code MCP servers. It supports `stdio`, `http`, and `sse` transports; `project`, `local`, and `user` scopes; plus optional arguments, environment variables, and HTTP headers. Project-scoped servers are configured from `/workspace`, which is mounted from `./workspace`.
 
 You can also manage MCP servers over SSH:
 
 ```bash
 claude mcp list
+claude mcp add --scope project --transport stdio filesystem -- npx -y @modelcontextprotocol/server-filesystem /workspace
 claude mcp add --scope project --transport http my-mcp http://host.docker.internal:3000/mcp
 claude mcp remove --scope project my-mcp
 ```
@@ -292,6 +348,7 @@ claude mcp remove --scope project my-mcp
 
 - **Connection refused**: Ensure your LLM server is running and listening on the configured port
 - **Docker networking**: Use `host.docker.internal` (not `localhost`) to access host services from Docker
+- **Port conflict**: Override local ports with `PENTESTGPT_WEB_PORT` or `PENTESTGPT_SSH_PORT`
 - **Check CCR logs**: Inside the container, run `cat /tmp/ccr.log`
 
 ---
@@ -328,9 +385,24 @@ pentestgpt-benchmark list --tags sqli        # Filter by vulnerability type
 pentestgpt-benchmark start XBEN-037-24       # Start a benchmark
 pentestgpt-benchmark status                  # Check running benchmarks
 pentestgpt-benchmark stop XBEN-037-24        # Stop a benchmark
+pentestgpt-benchmark list --show-tags        # Show all available tags
 ```
 
 **Available Tags:** `sqli`, `xss`, `idor`, `ssti`, `ssrf`, `lfi`, `rce`
+
+Automated benchmark runs write logs and summaries to `logs/benchmark_run_*`:
+
+```bash
+pentestgpt-benchmark run --range 1-10 --timeout 900 --model sonnet
+pentestgpt-benchmark run --ids 1,5,10 --resume
+pentestgpt-benchmark run --all --any-flag
+pentestgpt-benchmark run --retry-failed
+pentestgpt-benchmark run --retry-failed logs/benchmark_run_YYYYMMDD_HHMMSS
+pentestgpt-benchmark analyze
+pentestgpt-benchmark analyze logs/benchmark_run_YYYYMMDD_HHMMSS
+```
+
+Model aliases for benchmark runs are `opus`, `sonnet`, and `haiku`. Use `--pattern-flag` when you only want strict `FLAG{...}` matches to count as a successful flag capture.
 
 ---
 
@@ -352,11 +424,20 @@ uv run pentestgpt --target 10.10.11.234      # Run locally
 ### Project Commands
 
 ```bash
-make test          # Run pytest
-make lint          # Run ruff linter
-make typecheck     # Run mypy
-make ci            # Run full CI simulation (lint, format, typecheck, test, build)
-make ci-quick      # Quick CI without build step
+make dev-install      # Install local dev dependencies
+make test             # Run pytest except Docker tests
+make test-unit        # Run unit tests
+make test-integration # Run integration tests
+make test-docker      # Run Docker tests
+make test-fast        # Run non-slow, non-Docker tests
+make lint             # Run ruff linter
+make lint-fix         # Apply safe ruff fixes
+make format           # Format with ruff
+make format-check     # Check formatting
+make typecheck        # Run mypy
+make ci               # Run full CI simulation (lint, format, typecheck, test, build)
+make ci-quick         # Quick CI without build step
+make ci-full          # CI plus Docker compose validation/build/tests
 ```
 
 ---
