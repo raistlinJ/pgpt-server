@@ -158,3 +158,15 @@ class TestEventBus:
         """Test that events have timestamps."""
         event = Event(EventType.MESSAGE, {"text": "test"})
         assert event.timestamp is not None
+
+    def test_emit_writes_activity_log(self, tmp_path, monkeypatch):
+        """Test that emitted events are appended to the shared activity log."""
+        log_path = tmp_path / "activity.log"
+        monkeypatch.setenv("PENTESTGPT_ACTIVITY_LOG", str(log_path))
+
+        bus = EventBus.get()
+        bus.emit_message("Test message", "info")
+
+        content = log_path.read_text(encoding="utf-8")
+        assert "[MESSAGE]" in content
+        assert "Test message" in content

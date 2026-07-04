@@ -44,6 +44,7 @@ services:
       - PENTESTGPT_WEB_HOST=0.0.0.0
       - PENTESTGPT_WEB_PORT=8080
       - PENTESTGPT_CCR_LOG=/tmp/ccr.log
+      - PENTESTGPT_ACTIVITY_LOG=/workspace/pentestgpt-activity.log
       - PENTESTGPT_RUNTIME_CONFIG=/workspace/pentestgpt.yml
       # API keys (set based on auth mode via .env.auth)
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}

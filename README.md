@@ -275,6 +275,8 @@ The model dropdown starts empty. Use **Fetch models** to load the list from your
 
 The UI writes the persisted YAML config at `/workspace/pentestgpt.yml`, generates the CCR config at `/home/pentester/.claude-code-router/config.json`, and restarts Claude Code Router after each save.
 
+The Runtime panel also shows a live activity feed that combines PentestGPT events with Claude Code Router output.
+
 You can run the whole configured flow in one shot:
 
 ```bash
