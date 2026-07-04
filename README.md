@@ -275,7 +275,7 @@ The model dropdown starts empty. Use **Fetch models** to load the list from your
 
 The UI writes the persisted YAML config at `/workspace/pentestgpt.yml`, generates the CCR config at `/home/pentester/.claude-code-router/config.json`, and restarts Claude Code Router after each save.
 
-The Runtime panel also shows a live activity feed that combines PentestGPT events with Claude Code Router output.
+The main page also shows a live activity feed under the model routing form that combines PentestGPT events with Claude Code Router output.
 
 You can run the whole configured flow in one shot:
 
@@ -335,7 +335,7 @@ mcp:
 
 ### MCP Servers
 
-Open the **MCP Servers** tab in the web UI to list, add, and remove Claude Code MCP servers. It supports `stdio`, `http`, and `sse` transports; `project`, `local`, and `user` scopes; plus optional arguments, environment variables, and HTTP headers. Project-scoped servers are configured from `/workspace`, which is mounted from `./workspace`.
+The web UI MCP tab is disabled for now. Use the Claude Code CLI over SSH to list, add, and remove MCP servers. It supports `stdio`, `http`, and `sse` transports; `project`, `local`, and `user` scopes; plus optional arguments, environment variables, and HTTP headers. Project-scoped servers are configured from `/workspace`, which is mounted from `./workspace`.
 
 You can also manage MCP servers over SSH:
 

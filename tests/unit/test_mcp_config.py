@@ -7,7 +7,9 @@ from pentestgpt.server.mcp_config import (
     MCPRemoveRequest,
     build_mcp_add_command,
     build_mcp_remove_command,
+    list_mcp_servers,
     parse_mcp_add_payload,
+    parse_mcp_list_output,
     parse_mcp_remove_payload,
 )
 
@@ -130,3 +132,64 @@ def test_parse_remove_payload_allows_any_scope() -> None:
 
     assert request.name == "tools"
     assert request.scope is None
+
+
+def test_parse_mcp_list_output_extracts_servers() -> None:
+    """Claude MCP list output is converted into structured server rows."""
+    servers = parse_mcp_list_output(
+        "\n".join(
+            [
+                "Checking MCP server health…",
+                "filesystem: npx -y @modelcontextprotocol/server-filesystem /workspace - ✓ Connected",
+                "claude.ai Google Drive: https://drivemcp.googleapis.com/mcp/v1 - ! Needs authentication",
+            ]
+        )
+    )
+
+    assert servers == [
+        {
+            "name": "filesystem",
+            "transport": "stdio",
+            "endpoint": "npx -y @modelcontextprotocol/server-filesystem /workspace",
+            "status": "✓ Connected",
+            "health": "ok",
+            "auth_required": False,
+            "raw_line": "filesystem: npx -y @modelcontextprotocol/server-filesystem /workspace - ✓ Connected",
+        },
+        {
+            "name": "claude.ai Google Drive",
+            "transport": "http",
+            "endpoint": "https://drivemcp.googleapis.com/mcp/v1",
+            "status": "! Needs authentication",
+            "health": "warn",
+            "auth_required": True,
+            "raw_line": "claude.ai Google Drive: https://drivemcp.googleapis.com/mcp/v1 - ! Needs authentication",
+        },
+    ]
+
+
+def test_list_mcp_servers_includes_structured_rows(monkeypatch: pytest.MonkeyPatch) -> None:
+    """list_mcp_servers exposes parsed rows alongside raw Claude output."""
+    monkeypatch.setattr(
+        "pentestgpt.server.mcp_config.run_command",
+        lambda command, timeout=30: {
+            "ok": True,
+            "returncode": 0,
+            "output": "filesystem: npx -y @modelcontextprotocol/server-filesystem /workspace - ✓ Connected",
+        },
+    )
+
+    result = list_mcp_servers()
+
+    assert result["ok"] is True
+    assert result["servers"] == [
+        {
+            "name": "filesystem",
+            "transport": "stdio",
+            "endpoint": "npx -y @modelcontextprotocol/server-filesystem /workspace",
+            "status": "✓ Connected",
+            "health": "ok",
+            "auth_required": False,
+            "raw_line": "filesystem: npx -y @modelcontextprotocol/server-filesystem /workspace - ✓ Connected",
+        }
+    ]
