@@ -1,7 +1,7 @@
 # PentestGPT Makefile
 # Usage: make [target]
 
-.PHONY: help install config connect start stop shell logs clean-docker
+.PHONY: help install config connect ssh web attach start stop shell logs clean-docker
 .PHONY: dev-install test test-cov test-verbose lint format typecheck clean build
 .PHONY: ci ci-quick ci-full
 
@@ -14,7 +14,10 @@ help:
 	@echo "  make install         Install dependencies (uv sync) and build Docker image"
 	@echo "  make config          Configure authentication (interactive)"
 	@echo "                       Options: Claude Login, OpenRouter, Anthropic API, Local LLM"
-	@echo "  make connect         Connect to container (main entry point)"
+	@echo "  make connect         Start container and connect over SSH"
+	@echo "  make ssh             Connect over SSH to the running container"
+	@echo "  make web             Print the local web config UI URL"
+	@echo "  make attach          Attach to the container TTY"
 	@echo "  make start           Start container in background"
 	@echo "  make stop            Stop container (keeps config)"
 	@echo "  make shell           Open new shell in running container"
@@ -49,9 +52,22 @@ config:
 	@chmod +x scripts/config.sh
 	@./scripts/config.sh
 
-# Connect to the running container (main entry point)
+# Start the container and connect over SSH (main entry point)
 # Handles different auth modes automatically based on .env.auth
-connect:
+connect: start ssh
+
+# Connect to the running container over SSH
+ssh:
+	@echo "Connecting to PentestGPT over SSH..."
+	@echo "Default password: $${PENTESTGPT_SSH_PASSWORD:-pentestgpt}"
+	@ssh -o StrictHostKeyChecking=accept-new -p "$${PENTESTGPT_SSH_PORT:-2222}" pentester@127.0.0.1
+
+# Print the web config UI URL
+web:
+	@echo "PentestGPT config UI: http://127.0.0.1:$${PENTESTGPT_WEB_PORT:-8080}"
+
+# Attach to the running container TTY (legacy workflow)
+attach:
 	@if [ "$$(docker ps -q -f name=pentestgpt)" ]; then \
 		echo "Attaching to running container..."; \
 		docker attach pentestgpt; \
@@ -78,7 +94,7 @@ stop:
 
 # Execute command in running container
 shell:
-	docker exec -it pentestgpt /bin/bash
+	docker exec -it --user pentester pentestgpt /bin/bash
 
 # View container logs
 logs:

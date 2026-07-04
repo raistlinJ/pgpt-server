@@ -58,6 +58,8 @@
 - **Autonomous Agent** - Agentic pipeline for intelligent, autonomous penetration testing
 - **Session Persistence** - Save and resume penetration testing sessions
 - **Docker-First** - Isolated, reproducible environment with security tools pre-installed
+- **SSH + Local Web Config** - Start the container, configure local LLM routing in a browser, and run PentestGPT over SSH
+- **MCP Server Management** - Add, list, and remove Claude Code MCP servers from the local web UI
 
 > **In Progress**: Multi-model support for OpenAI, Gemini, and other LLM providers
 
@@ -78,6 +80,7 @@
 ### Prerequisites
 
 - **Docker** (required) - [Install Docker](https://docs.docker.com/get-docker/)
+- **Linux helper**: On a fresh Linux host, run `./install_prereq.sh` after cloning to install Docker, Docker Compose, `git`, `make`, and `curl`, then add your user to the `docker` group.
 - **LLM Provider** (choose one):
   - Anthropic API Key from [console.anthropic.com](https://console.anthropic.com/)
   - Claude OAuth Login (requires Claude subscription)
@@ -88,19 +91,69 @@
 ### Installation
 
 ```bash
-# Clone and build
-git clone --recurse-submodules https://github.com/GreyDGL/PentestGPT.git
-cd PentestGPT
+# Clone
+git clone <your-repo-url> pgpt-server
+cd pgpt-server
+
+# Fresh Linux host only: install Docker/Compose and host prerequisites
+chmod +x install_prereq.sh
+./install_prereq.sh
+
+# If the script added you to the docker group, refresh group membership
+newgrp docker
+
+# Build
 make install
 
-# Configure authentication (first time only)
+# Configure authentication (optional; Local LLM is the default in this image)
 make config
 
-# Connect to container
+# Start the container
+make start
+
+# Configure local LLM endpoint and model routing
+open http://127.0.0.1:8080
+
+# Connect to container over SSH
 make connect
 ```
 
 > **Note**: The `--recurse-submodules` flag downloads the benchmark suite. If you already cloned without it, run: `git submodule update --init --recursive`
+
+### Fresh Linux Host Prerequisites
+
+`install_prereq.sh` performs the host setup needed before `make install`:
+
+- installs `git`, `make`, `curl`, CA certificates, and GPG tooling where needed
+- installs Docker Engine and the Docker Compose plugin when missing
+- asks whether to create the `docker` group if needed
+- asks whether to add the current user to the `docker` group
+- enables and starts the Docker service
+- verifies Docker and Compose are reachable
+
+Run it with:
+
+```bash
+./install_prereq.sh
+```
+
+If Docker only works with `sudo` immediately after the script finishes, refresh your shell:
+
+```bash
+newgrp docker
+```
+
+For unattended installs, pre-answer the Docker group prompts:
+
+```bash
+PGPT_DOCKER_GROUP=yes PGPT_DOCKER_GROUP_USER=yes ./install_prereq.sh
+```
+
+On remote Linux hosts, forward the web UI to your laptop:
+
+```bash
+ssh -L 8080:127.0.0.1:8080 youruser@linux-host
+```
 
 ### Try a Benchmark
 
@@ -120,9 +173,21 @@ pentestgpt --target http://host.docker.internal:8000
 |---------|-------------|
 | `make install` | Build the Docker image |
 | `make config` | Configure API key (first-time setup) |
-| `make connect` | Connect to container (main entry point) |
+| `make start` | Start container in the background |
+| `make connect` | Start container and connect over SSH |
+| `make ssh` | SSH to a running container |
+| `make web` | Print the local web config UI URL |
+| `make attach` | Attach to the container TTY |
 | `make stop` | Stop container (config persists) |
 | `make clean-docker` | Remove everything including config |
+
+Default local endpoints:
+
+- Web config UI: `http://127.0.0.1:8080`
+- SSH: `ssh -p 2222 pentester@127.0.0.1`
+- Default SSH password: `pentestgpt`
+
+Override ports or the SSH password with `PENTESTGPT_WEB_PORT`, `PENTESTGPT_SSH_PORT`, and `PENTESTGPT_SSH_PASSWORD`.
 
 
 ---
@@ -157,30 +222,71 @@ PentestGPT supports routing requests to local LLM servers (LM Studio, Ollama, te
 ### Setup
 
 ```bash
-# Configure PentestGPT for local LLM
-make config
-# Select option 4: Local LLM
-
 # Start your local LLM server on the host machine
-# Then connect to the container
+# Then start PentestGPT and open the web config UI
+make start
+open http://127.0.0.1:8080
+
+# Save your provider, model, and context settings, then SSH in
 make connect
 ```
 
 ### Customizing Models
 
-Edit `scripts/ccr-config-template.json` to customize:
+Use the web config UI to customize:
 
-- **`localLLM.api_base_url`**: Your LLM server URL (default: `host.docker.internal:1234`)
-- **`localLLM.models`**: Available model names on your server
-- **Router section**: Which models handle which operations
+- **Provider**: OpenAI-compatible or Ollama
+- **API base URL**: Your host LLM server URL
+  - OpenAI-compatible default: `http://host.docker.internal:1234/v1/chat/completions`
+  - Ollama default: `http://host.docker.internal:11434`
+- **Enforce SSL**: Requires `https://` for OpenAI-compatible endpoints when enabled
+- **Fetch models**: Pulls model names from `/v1/models` or Ollama `/api/tags`
+- **Model**: The selected model used by all hidden CCR routes
+- **Context window length**: Saved as CCR's long-context threshold
 
-| Route | Purpose | Default Model |
-|-------|---------|---------------|
-| `default` | General tasks | openai/gpt-oss-20b |
-| `background` | Background operations | openai/gpt-oss-20b |
-| `think` | Reasoning-heavy tasks | qwen/qwen3-coder-30b |
-| `longContext` | Large context handling | qwen/qwen3-coder-30b |
-| `webSearch` | Web search operations | openai/gpt-oss-20b |
+The model dropdown starts empty. Use **Fetch models** to load the list from your configured provider, then save.
+
+The UI writes the persisted YAML config at `/workspace/pentestgpt.yml`, generates the CCR config at `/home/pentester/.claude-code-router/config.json`, and restarts Claude Code Router after each save.
+
+You can run the whole configured flow in one shot:
+
+```bash
+pentestgpt-run --target TARGET
+```
+
+`pentestgpt-run` reads `/workspace/pentestgpt.yml`, starts Claude Code Router, applies any MCP servers declared in the optional `mcp.servers` YAML section, and launches `pentestgpt`. You can also put the target and run flags in YAML under `pentestgpt`.
+
+Example YAML:
+
+```yaml
+llm:
+  provider: openai-compatible
+  api_base_url: http://host.docker.internal:1234/v1
+  api_key: ""
+  enforce_ssl: false
+  models:
+    - local-model-name
+  selected_model: local-model-name
+  context_window: 60000
+pentestgpt:
+  target: ""
+  instruction: ""
+  non_interactive: false
+mcp:
+  servers: []
+```
+
+### MCP Servers
+
+Open the **MCP Servers** tab in the web UI to list, add, and remove Claude Code MCP servers. Project-scoped servers are configured from `/workspace`, which is mounted from `./workspace`.
+
+You can also manage MCP servers over SSH:
+
+```bash
+claude mcp list
+claude mcp add --scope project --transport http my-mcp http://host.docker.internal:3000/mcp
+claude mcp remove --scope project my-mcp
+```
 
 ### Troubleshooting
 

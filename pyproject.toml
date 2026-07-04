@@ -34,11 +34,13 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "anthropic>=0.75.0",
     "langfuse>=2.0.0",
+    "PyYAML>=6.0.0",
 ]
 
 [project.scripts]
 pentestgpt = "pentestgpt.interface.main:main"
 pentestgpt-benchmark = "pentestgpt.benchmark.cli:main"
+pentestgpt-run = "pentestgpt.server.run_configured:main"
 
 [project.urls]
 Homepage = "https://github.com/GreyDGL/PentestGPT"
@@ -119,6 +121,7 @@ disallow_untyped_defs = true
 module = [
     "claude_agent_sdk.*",
     "textual.*",
+    "yaml.*",
 ]
 ignore_missing_imports = true
 
