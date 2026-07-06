@@ -11,6 +11,7 @@ CCR_TEMPLATE_FILE="/app/scripts/ccr-config-template.json"
 CCR_LOG_FILE="${PENTESTGPT_CCR_LOG:-/tmp/ccr.log}"
 RUNTIME_CONFIG_FILE="${PENTESTGPT_RUNTIME_CONFIG:-/workspace/pentestgpt.yml}"
 SSH_PASSWORD="${PENTESTGPT_SSH_PASSWORD:-pentestgpt}"
+SSH_PORT="${PENTESTGPT_SSH_PORT:-22}"
 WEB_HOST="${PENTESTGPT_WEB_HOST:-0.0.0.0}"
 WEB_PORT="${PENTESTGPT_WEB_PORT:-8080}"
 
@@ -63,7 +64,8 @@ start_ssh() {
     fi
 
     if ! pgrep -x sshd >/dev/null 2>&1; then
-        /usr/sbin/sshd
+        echo -e "${BLUE}Starting SSH on port ${SSH_PORT}...${NC}"
+        /usr/sbin/sshd -o "Port=${SSH_PORT}"
     fi
 }
 
